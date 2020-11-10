@@ -14,7 +14,7 @@ from tqdm import tqdm
 import argparse
 
 # run command
-# python bert_evaluate.py -d data/data_test_0 -s data/result0.csv -m models/model0/pytorch_model.bin -t /data0/zhouyue/ted/data/cache/roberta/
+# python bert_evaluate.py -d data/test.csv -s data/tmp.csv -m models/roberta.pt -t /data0/zhouyue/ted/data/cache/roberta/
 
 
 parser = argparse.ArgumentParser()
@@ -102,8 +102,8 @@ def torch_predict(model, test_x, test_y):
     y_pred = []
     y_real = []
     with torch.no_grad():
-        correct = 0
-        total = 0
+        correct=0
+        total=0
         for batch in tqdm(test_loader):
             input_ids = batch['input_ids'].squeeze(1).to(device)
             token_type_ids = batch['token_type_ids'].squeeze(1).to(device)
@@ -130,9 +130,8 @@ def torch_predict(model, test_x, test_y):
     
 y_real, y_pred, test_x, test_y = torch_predict(model, test_x, test_y)
 df = pd.DataFrame()
+df['msg']=test_x
 df['y_real']=y_real
 df['y_pred']=y_pred
-df['test_x']=test_x
 df['test_y']=test_y
 df.to_csv(args.path2, index=False, sep='\t')
-
