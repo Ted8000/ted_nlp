@@ -13,6 +13,9 @@ import sys
 from tqdm import tqdm
 import argparse
 
+# run
+# python bert.py -d1 ./data/train_1111 -d2 ./data/test.csv -s ./models/roberta_2.pt
+
 parser = argparse.ArgumentParser()
 parser.add_argument("-d1", "--path1", nargs='?', const=1, type=str, default="data/train",
                         help="train path load")
