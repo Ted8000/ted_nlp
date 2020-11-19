@@ -6,16 +6,47 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from sklearn.metrics import classification_report
 from sklearn.model_selection import train_test_split
+from get_entity import sequence_labeling_report
+import argparse
+
+
+# run
+# python ner.py -m /data0/zhouyue/ted/data/cache/roberta_large/  -s /data0/zhouyue/ted/data/ner_models/bert_base.pt -r /data0/zhouyue/ted/data/ner_models/bert_base_report -g 0
+
+parser = argparse.ArgumentParser()
+parser.add_argument("-d1", "--path1", nargs='?', const=1, type=str, default="data/train",
+                        help="train path load")
+parser.add_argument("-d2", "--path2", nargs='?', const=1, type=str, default="data/test",
+                        help="test path load")
+parser.add_argument("-m", "--path3", nargs='?', const=1, type=str, default="voidful/albert_chinese_tiny",
+                        help="model path load")
+parser.add_argument("-s", "--path4", nargs='?', const=1, type=str, default="/data0/zhouyue/ted/data/ner_models/model_tmp.pt",
+                        help="model path save")
+parser.add_argument("-r", "--path5", nargs='?', const=1, type=str, default="/data0/zhouyue/ted/data/ner_models/report1",
+                        help="model path save")
+parser.add_argument("-g", "--gpu", nargs='?', const=1, type=int, default=0,
+                        help="model path save")
+parser.add_argument("-bs", "--batch_size", nargs='?', const=1, type=int, default=32,
+                        help="model path save")
+
+args = parser.parse_args()
+
 
 # data load
 msgs = []
 labels = []
 with open('source_BIO_2014_cropus.txt', 'r') as f:
     for i in f:
-        msgs.append(list(i.split()))
+        if len(i.split())==0:
+            pass
+        else:
+            msgs.append(list(i.split()))
 with open('target_BIO_2014_cropus.txt', 'r') as f:
     for i in f:
-        labels.append(list(i.split()))
+        if len(i.split())==0:
+            pass
+        else:
+            labels.append(list(i.split()))
 
 
 # 数据集划分
@@ -28,6 +59,8 @@ id2tag = {id: tag for tag, id in tag2id.items()}
 train_texts = list(' '.join(x) for x in train_texts)
 val_texts = list(' '.join(x) for x in val_texts)
 
+
+# dataset define
 class CustomDataset(torch.utils.data.Dataset):
     def __init__(self, tokenizer, train_x, train_y, max_len):
         self.tokenizer = tokenizer
@@ -44,7 +77,9 @@ class CustomDataset(torch.utils.data.Dataset):
         batch['labels'] = torch.cat((torch.cat((torch.tensor([-100]),torch.tensor(self.train_y[index]),torch.tensor([-100]*self.max_len)))[:self.max_len-1], torch.tensor([-100])))
         
         return batch
+
     
+# model define
 class BERTClass(torch.nn.Module):
     def __init__(self, pretrain_name, num_class, cache_dir=None):
         super(BERTClass, self).__init__()
@@ -80,24 +115,23 @@ val_tags_label = tag2label(val_tags)
 # model load
 num_class = len(tag2id)
 
-tokenizer = BertTokenizer.from_pretrained('voidful/albert_chinese_tiny')
-model = BERTClass('voidful/albert_chinese_tiny', num_class)
+tokenizer = BertTokenizer.from_pretrained(args.path3)
+model = BERTClass(args.path3, num_class)
 
 
 # 超参数
 max_len=128
-batch_sieze = 128
-epochs = 3
-batch_size = 64
+epochs = 5
+batch_size = args.batch_size
 lr = 5e-5
+
+device = torch.device('cuda:{}'.format(args.gpu)) if torch.cuda.is_available() else torch.device('cpu')
 
 train_dataset = CustomDataset(tokenizer, train_texts, train_tags_label, max_len)
 valid_dataset = CustomDataset(tokenizer, val_texts, val_tags_label, max_len)
 
-train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=8)
+train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=4)
 valid_loader = DataLoader(valid_dataset, batch_size=batch_size)
-
-device = torch.device('cuda:3') if torch.cuda.is_available() else torch.device('cpu')
 
 model.to(device)
 model.train()
@@ -111,7 +145,7 @@ total_step = len(train_loader)
 
 # train
 for epoch in range(epochs):
-    for i,batch in enumerate(tqdm(valid_loader)):
+    for i,batch in enumerate(tqdm(train_loader)):
         optim.zero_grad()
         
         input_ids = batch['input_ids'].to(device).squeeze(1)
@@ -155,11 +189,21 @@ for batch in tqdm(valid_loader):
     for i in range(len(logits)):
         pred.append(torch.max(logits[i][attention_mask[i]==1][1:-1], 1)[1].tolist())
         real.append(labels[i][attention_mask[i]==1][1:-1].tolist())    
-        
-a = [id2tag[i] for item in real for i in item]
-b = [id2tag[i] for item in pred for i in item]
-report = classification_report(a, b)
-print(report)
 
+def fuc_label(data):
+    res = []
+    for i in data:
+        tmp = []
+        for j in i:
+            tmp.append(id2tag[j])
+        res.append(tmp)
+    return res
+
+y_real_ = fuc_label(real)
+y_pred_ = fuc_label(pred)
+res_dic, res = sequence_labeling_report(y_real_, y_pred_)
+with open(args.path5, 'w') as f:
+    f.write(res)
 
 #model save
+torch.save(model, args.path4)
