@@ -17,13 +17,15 @@ import argparse
 # python bert.py -d1 ./data/train_1111 -d2 ./data/test.csv -s ./models/roberta_2.pt
 
 parser = argparse.ArgumentParser()
-parser.add_argument("-d1", "--path1", nargs='?', const=1, type=str, default="data/train",
+parser.add_argument("-d1", "--path1", nargs='?', const=1, type=str, default="/home/lupinsu001/data/classification/train",
                         help="train path load")
-parser.add_argument("-d2", "--path2", nargs='?', const=1, type=str, default="data/test",
+parser.add_argument("-d2", "--path2", nargs='?', const=1, type=str, default="/home/lupinsu001/data/classification/test",
                         help="test path load")
-parser.add_argument("-m", "--path3", nargs='?', const=1, type=str, default="/data0/zhouyue/ted/data/cache/roberta/",
+parser.add_argument("-token", "--token_path", nargs='?', const=1, type=str, default="bert-base-chinese",
                         help="model path load")
-parser.add_argument("-s", "--path4", nargs='?', const=1, type=str, default="/data0/zhouyue/ted/data/model_tmp.pt",
+parser.add_argument("-m", "--path3", nargs='?', const=1, type=str, default="/home/lupinsu001/EsperBERTo/checkpoint-150000/",
+                        help="model path load")
+parser.add_argument("-s", "--path4", nargs='?', const=1, type=str, default="/home/lupinsu001/EsperBERTo/model_tmp.pt",
                         help="model path save")
 parser.add_argument("-g", "--gpu", nargs='?', const=1, type=int, default=0,
                         help="model path save")
@@ -41,7 +43,7 @@ train_x, train_y = df_train.iloc[:,0].tolist(), df_train.iloc[:,1].tolist()
 test_x, test_y = df_test.iloc[:,0].tolist(), df_test.iloc[:,1].tolist()
 
 # label load
-with open('label_save', 'r') as f:
+with open('/home/lupinsu001/data/classification/label_save', 'r') as f:
     labels = f.read().split()
 
 label2id = {}
@@ -65,8 +67,8 @@ class BERTClass(torch.nn.Module):
         self.l2 = torch.nn.Dropout(0.3)
         self.l3 = torch.nn.Linear(hidden, num_class)
     
-    def forward(self, ids, mask, token_type_ids):
-        _, output_1= self.l1(ids, attention_mask = mask, token_type_ids = token_type_ids)
+    def forward(self, input_ids, attention_mask, token_type_ids):
+        _, output_1= self.l1(input_ids, attention_mask = attention_mask, token_type_ids = token_type_ids)
         output_2 = self.l2(output_1)
         output = self.l3(output_2)
         return output
@@ -90,7 +92,7 @@ lr = 5e-5
 batch_size = 256
 epochs = 10
 
-tokenizer = BertTokenizer.from_pretrained(args.path3)
+tokenizer = BertTokenizer.from_pretrained(args.token_path)
 model = BERTClass(args.path3, num_class)
 
 training_set = CustomDataset(tokenizer, train_x, train_y)
@@ -123,7 +125,7 @@ for epoch in range(epochs):
         labels = batch['label'].to(device)
         
         # Forward pass
-        outputs = model(input_ids, token_type_ids, attention_mask)
+        outputs = model(input_ids, attention_mask, token_type_ids)
         
         loss = criterion(outputs, labels)
         
@@ -149,7 +151,7 @@ for epoch in range(epochs):
             token_type_ids = batch['token_type_ids'].squeeze(1).to(device)
             attention_mask = batch['attention_mask'].squeeze(1).to(device)
             labels = batch['label'].to(device)
-            outputs = model(input_ids, token_type_ids, attention_mask)
+            outputs = model(input_ids, attention_mask, token_type_ids)
             _, predicted = torch.max(outputs.data, 1)
             total += labels.size(0)
             correct += (predicted == labels).sum().item()
